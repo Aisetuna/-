@@ -1,0 +1,51 @@
+# Data & results
+datasets/
+result/
+output/
+checkpoints/
+
+# Local source archives, temporary notebooks, and generated data workspaces
+.chicago_work/
+datasets/source_files/
+*.csv
+*.zip
+*.zip.part
+*.npy
+*.npz
+*.parquet
+
+# Local paper-management material (not part of the UQGNN implementation)
+obsidian_import_stage/
+obsidian_restructure_backup/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+build/
+dist/
+.ruff_cache/
+
+# Environments
+venv/
+env/
+.venv/
+.python310/
+
+# Model weights & logs
+*.pt
+*.pth
+*.log
+*.err
+slurm-*.out
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Agent tooling
+.claude*
+CLAUDE*
