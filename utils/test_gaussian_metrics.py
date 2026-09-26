@@ -15,9 +15,11 @@ sd = torch.tensor([[1., 2., .5]], dtype=torch.float64)
 cov = torch.diag_embed(sd.square())
 np.testing.assert_allclose(masked_crps(mean, y, float('nan'), cov).item(),
                            ps.crps_gaussian(y.numpy(), mean.numpy(), sd.numpy()).mean())
-lo, hi = gaussian_intervals(mean, cov)
+lo, hi = gaussian_intervals(mean, cov, .1)
 np.testing.assert_allclose((hi-lo).numpy(), 2*1.6448536269514722*sd.numpy())
 engine = BaseEngine.__new__(BaseEngine)
+from types import SimpleNamespace
+engine.args = SimpleNamespace(covariance_space='normalized')
 engine._loss_fn = 'MGAU'
 engine._scaler = MinMaxScaler([0, 0, 0], [2, 3, 4])
 np.testing.assert_allclose(engine._inverse_covariance(cov).numpy(),
@@ -47,3 +49,20 @@ try:
 except ValueError:
     pass
 print('Affine NLL/gradient equivalence and point-forecast regression: PASS')
+
+correlated = torch.tensor([[[1., .2, .1], [.2, 2., .4], [.1, .4, 3.]]], dtype=torch.float64)
+expected = torch.diag(span) @ correlated @ torch.diag(span)
+torch.testing.assert_close(engine._inverse_covariance(correlated), expected)
+lo95, hi95 = gaussian_intervals(mean, cov, .05)
+np.testing.assert_allclose((hi95-lo95).numpy(), 2*1.959963984540054*sd.numpy())
+from base.metrics import paper_half_width
+np.testing.assert_allclose(paper_half_width(mean,y,float('nan'),cov).item(), 1.96*sd.mean().item())
+one_mu, one_y = mean[..., :1], y[..., :1]
+one_cov = cov[..., :1, :1]
+single = Metrics('MGAU', ['CRPS','MPIW','COV'])
+single.compute_one_batch(one_mu,one_y,float('nan'),'test',scale=one_cov)
+assert all(np.isfinite(v).all() for v in single.test_res)
+print('Off-diagonal covariance, 95% widths, paper half-width, single channel: PASS')
+engine.args.covariance_space = 'original'
+torch.testing.assert_close(engine._inverse_covariance(correlated), correlated)
+print('Legacy checkpoint covariance convention: PASS')

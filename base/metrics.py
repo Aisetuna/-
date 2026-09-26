@@ -154,7 +154,7 @@ def masked_mpiw(lower, upper, null_val=None):
     return torch.mean(upper - lower)
 
 
-def gaussian_intervals(mean, covariance, alpha=0.1):
+def gaussian_intervals(mean, covariance, alpha=0.05):
     """Unclipped central marginal intervals, not joint coverage regions."""
     if not 0 < alpha < 1:
         raise ValueError('interval alpha must be between zero and one')
@@ -406,7 +406,7 @@ class Metrics:
         null = _align(null_val, preds)
         if self.loss_name == 'MGAU' and kw.get('scale') is not None:
             kw['lower'], kw['upper'] = gaussian_intervals(
-                preds, kw['scale'], getattr(self, 'interval_alpha', 0.1))
+                preds, kw['scale'], getattr(self, 'interval_alpha', 0.05))
         buf = getattr(self, self._SPLITS.get(mode, "test_res"))
         grad_res = None
 

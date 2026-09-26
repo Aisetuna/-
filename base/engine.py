@@ -60,7 +60,7 @@ class BaseEngine:
         if metric_list is None:
             metric_list = ["MAE", "MAPE", "MSE", "RMSE", "KL", "CRPS"]
         self.metric = Metrics(self._loss_fn, metric_list, self.model.horizon)
-        self.metric.interval_alpha = getattr(args, 'interval_alpha', 0.1)
+        self.metric.interval_alpha = getattr(args, 'interval_alpha', 0.05)
 
         self._logger.info(f"{'Loss Function':20s}: {self._loss_fn}")
         self._logger.info(f"{'Parameters':20s}: {self.model.param_num()}")
@@ -139,6 +139,8 @@ class BaseEngine:
 
     def _inverse_covariance(self, covariance):
         if covariance is None or self._loss_fn != 'MGAU':
+            return covariance
+        if getattr(self.args, 'covariance_space', 'normalized') == 'original':
             return covariance
         if getattr(self._scaler, 'use_log1p', False):
             raise ValueError('Gaussian covariance inversion requires affine scaling, not log1p')

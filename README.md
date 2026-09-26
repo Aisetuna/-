@@ -6,8 +6,12 @@ The pre-correction baseline is commit `28b5763` on `main`. This branch treats
 UQGNN's mean and covariance as parameters in normalized target space. With
 per-channel affine scaling `y = D z + b`, evaluation uses `mu_y = D mu_z + b`
 and `Sigma_y = D Sigma_z D`. The old engine inverted only the mean and labels.
-Old checkpoints can be evaluated, but were trained with that inconsistent scale
-convention; they do not replace retraining under the corrected objective.
+Old checkpoints were trained with covariance consumed directly in count units.
+Use `--covariance_space original` to evaluate their actual training-time
+distribution; do not reinterpret that covariance as normalized and rescale it
+again. New runs default to `--covariance_space normalized`, establishing a common
+output-space convention for both heads. This changes the parameterization and
+training dynamics; improvements cannot be attributed solely to an evaluator fix.
 
 - `CRPS`: analytic Gaussian marginal CRPS averaged across samples/nodes/channels;
   not a joint multivariate score and not MAE of the mean.

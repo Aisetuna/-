@@ -12,6 +12,8 @@ from utils.graph_algo import normalize_adj_mx
 
 
 def add_args(parser):
+    parser.add_argument('--covariance_space', choices=['normalized', 'original'], default='normalized',
+                        help='Use original for checkpoints trained by the legacy engine')
     parser.add_argument('--interval_alpha', type=float, default=0.05,
                         help='Gaussian marginal interval miscoverage; default 95 percent coverage')
     parser.add_argument("--hidden_dim_s", type=int, default=64)
