@@ -17,6 +17,11 @@ datasets/source_files/
 # Local paper-management material (not part of the UQGNN implementation)
 obsidian_import_stage/
 obsidian_restructure_backup/
+add_report_date.py
+obsidian_migrate.py
+obsidian_restructure_result.json
+rename_obsidian_navigation.py
+restructure_obsidian.py
 
 # Python
 __pycache__/
