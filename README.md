@@ -1,5 +1,49 @@
 # UQGNN
 
+## Gaussian evaluation correction branch
+
+The pre-correction baseline is commit `28b5763` on `main`. This branch treats
+UQGNN's mean and covariance as parameters in normalized target space. With
+per-channel affine scaling `y = D z + b`, evaluation uses `mu_y = D mu_z + b`
+and `Sigma_y = D Sigma_z D`. The old engine inverted only the mean and labels.
+Old checkpoints can be evaluated, but were trained with that inconsistent scale
+convention; they do not replace retraining under the corrected objective.
+
+- `CRPS`: analytic Gaussian marginal CRPS averaged across samples/nodes/channels;
+  not a joint multivariate score and not MAE of the mean.
+- `MPIW`: full width of central Gaussian marginal intervals; default confidence
+  95%, configurable with `--interval_alpha 0.05`. Bounds are not clipped to zero.
+- `COV`: empirical marginal coverage, in percent. Narrower intervals alone are
+  not evidence of better uncertainty estimates.
+- `PAPER_HALF_WIDTH`: `mean(1.96*sigma)`, separately named because Appendix B.2
+  states this expression although equation (17) defines full width `upper-lower`.
+  This is about half the standard 95% MPIW and must not be silently substituted.
+- `MAPE` remains a percentage and excludes zero targets. Divide by 100 to report
+  a ratio; confirm the paper table's unit before numerical comparisons.
+- `KL` retains the repository's normalized demand-distribution definition; this
+  is not a KL between two multivariate Gaussian distributions.
+
+`--export` additionally saves `*-gaussian.npz` with mean, covariance, targets,
+lower/upper bounds and interval alpha. Raw results remain ignored by Git.
+
+```powershell
+.\.venv\Scripts\python.exe utils/test_gaussian_metrics.py
+.\.venv\Scripts\python.exe src/flow/uqgnn/main.py --dataset chicago_15min --years 2022 --mode test --model_path "path/to/checkpoint.pt" --proj gaussian_eval --export
+.\.venv\Scripts\python.exe utils/compare_uqgnn_epochs.py --budgets 20 50 100 200 400 --seed 2025 --bs 32
+```
+
+The budget comparison uses one shared training trajectory, no early stopping,
+and validation-NLL checkpoint selection within each predeclared budget. The test
+set is evaluated only after training. It uses normalized Gaussian NLL, which
+differs from correctly affine-transformed count-space NLL by a constant and has
+the same analytical gradients (tested). Evaluation is in count units. Batch
+size, seed and learning-rate schedule are held fixed; this isolates budget
+effects within this configuration, not a claim of exact paper reproduction or
+statistical significance across seeds. Results are saved under
+`result/epoch_comparison/<timestamp>/`. To evaluate previously exported forecasts
+at another confidence level, use `utils/rescore_gaussian_exports.py <directory>
+--alpha 0.05`; this does not retrain or change checkpoint selection.
+
 **Uncertainty Quantification of Graph Neural Networks for Multivariate Spatiotemporal Prediction**
 
 [![Venue](https://img.shields.io/badge/ACM%20SIGSPATIAL-2025-blue)](https://dl.acm.org/doi/10.1145/3748636.3762709)

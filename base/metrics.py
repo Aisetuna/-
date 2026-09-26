@@ -101,8 +101,15 @@ def masked_kl(preds, labels, null_val):
     return torch.where(target_sum.squeeze(1) > 0, per_sample, torch.zeros_like(per_sample)).mean()
 
 
-def masked_crps(preds, labels, null_val):
-    """CRPS for an ensemble forecast, or MAE for a point-mass forecast."""
+def masked_crps(preds, labels, null_val, scale=None):
+    """Mean marginal Gaussian CRPS, ensemble CRPS, or point-mass MAE."""
+    if scale is not None:
+        sigma = torch.diagonal(scale, dim1=-2, dim2=-1).clamp_min(1e-8).sqrt()
+        z = (labels - preds) / sigma
+        score = sigma * (z * torch.erf(z / torch.sqrt(labels.new_tensor(2.0)))
+                         + 2.0 * torch.exp(-0.5 * z.square()) / torch.sqrt(labels.new_tensor(2.0 * np.pi))
+                         - 1.0 / torch.sqrt(labels.new_tensor(np.pi)))
+        return _masked_mean(score, get_mask(labels, null_val))
     if preds.shape == labels.shape:
         # CRPS of a deterministic (Dirac) forecast equals absolute error.
         return masked_mae(preds, labels, null_val)
@@ -145,6 +152,21 @@ def masked_true_zero_rate(preds, labels, null_val):
 
 def masked_mpiw(lower, upper, null_val=None):
     return torch.mean(upper - lower)
+
+
+def gaussian_intervals(mean, covariance, alpha=0.1):
+    """Unclipped central marginal intervals, not joint coverage regions."""
+    if not 0 < alpha < 1:
+        raise ValueError('interval alpha must be between zero and one')
+    sigma = covariance.diagonal(dim1=-2, dim2=-1).clamp_min(0).sqrt()
+    z = torch.distributions.Normal(mean.new_tensor(0.), mean.new_tensor(1.)).icdf(mean.new_tensor(1-alpha/2))
+    return mean-z*sigma, mean+z*sigma
+
+
+def paper_half_width(preds, labels, null, covariance):
+    """Appendix B.2 prose: 1.96*sigma, NOT the full 95% interval width."""
+    return _masked_mean(1.96 * covariance.diagonal(dim1=-2, dim2=-1).clamp_min(0).sqrt(),
+                        get_mask(labels, null))
 
 
 def masked_wink(lower, upper, labels, alpha=0.1):
@@ -275,7 +297,8 @@ _REGISTRY = {
     "KL":       (masked_kl,       "basic"),
     "CRPS":     (masked_crps,     "crps"),
     "MGAU":     (mnormal_loss,    "scale"),
-    "MPIW":     (masked_mpiw,     "interval"),
+    "PAPER_HALF_WIDTH": (paper_half_width, "scale"),
+    "MPIW":     (masked_mpiw, "interval"),
     "WINK":     (masked_wink,     "interval_target"),
     "COV":      (masked_coverage, "interval_target"),
     "IS":       (masked_IS,       "interval_target"),
@@ -306,6 +329,8 @@ def _dispatch(fn, kind, preds, labels, null, kw):
     if kind == "basic":
         return fn(preds, labels, null)
     if kind == "crps":
+        if kw.get("scale") is not None:
+            return fn(preds, labels, null, scale=kw["scale"])
         if "lower" in kw and "upper" in kw:
             return masked_interval_crps(kw["lower"], kw["upper"], labels, null)
         return fn(preds, labels, null)
@@ -379,6 +404,9 @@ class Metrics:
         """Compute all metrics for one batch; returns the loss tensor for backprop
         when *mode* == ``'train'``."""
         null = _align(null_val, preds)
+        if self.loss_name == 'MGAU' and kw.get('scale') is not None:
+            kw['lower'], kw['upper'] = gaussian_intervals(
+                preds, kw['scale'], getattr(self, 'interval_alpha', 0.1))
         buf = getattr(self, self._SPLITS.get(mode, "test_res"))
         grad_res = None
 

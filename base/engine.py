@@ -3,7 +3,7 @@ import time
 
 import numpy as np
 import torch
-from base.metrics import Metrics
+from base.metrics import Metrics, gaussian_intervals
 
 
 class BaseEngine:
@@ -60,6 +60,7 @@ class BaseEngine:
         if metric_list is None:
             metric_list = ["MAE", "MAPE", "MSE", "RMSE", "KL", "CRPS"]
         self.metric = Metrics(self._loss_fn, metric_list, self.model.horizon)
+        self.metric.interval_alpha = getattr(args, 'interval_alpha', 0.1)
 
         self._logger.info(f"{'Loss Function':20s}: {self._loss_fn}")
         self._logger.info(f"{'Parameters':20s}: {self.model.param_num()}")
@@ -136,6 +137,16 @@ class BaseEngine:
         filename = self._time_model
         torch.save(self.model.state_dict(), os.path.join(save_path, filename))
 
+    def _inverse_covariance(self, covariance):
+        if covariance is None or self._loss_fn != 'MGAU':
+            return covariance
+        if getattr(self._scaler, 'use_log1p', False):
+            raise ValueError('Gaussian covariance inversion requires affine scaling, not log1p')
+        span = (self._scaler.data_max_ - self._scaler.data_min_).to(covariance.device)
+        if span.ndim == 0:
+            return covariance * span.square()
+        return covariance * span[:, None] * span[None, :]
+
     def load_model(self, save_path):
         filename = self._time_model
         f = os.path.join(save_path, filename)
@@ -180,6 +191,7 @@ class BaseEngine:
                 pred, scale = pred
 
             if self._normalize:
+                scale = self._inverse_covariance(scale)
                 pred, label = self._inverse_transform(
                     [pred, label], device=self._device.type
                 )
@@ -297,6 +309,7 @@ class BaseEngine:
                     pred, scale = pred
 
                 if self._normalize:
+                    scale = self._inverse_covariance(scale)
                     pred, label = self._inverse_transform(
                         [pred, label], device=self._device.type
                     )
@@ -310,10 +323,11 @@ class BaseEngine:
                         scale=scale,
                     )
                 else:
-                    preds.append(self._collect(pred).cpu())
-                    labels.append(self._collect(label).cpu())
+                    preserve_channels = self._loss_fn == 'MGAU'
+                    preds.append((pred if preserve_channels else self._collect(pred)).cpu())
+                    labels.append((label if preserve_channels else self._collect(label)).cpu())
                     if scale is not None:
-                        scales.append(self._collect(scale).cpu())
+                        scales.append((scale if preserve_channels else self._collect(scale)).cpu())
 
         if mode == "val":
             return
@@ -341,6 +355,15 @@ class BaseEngine:
                     self._logger.info(msg)
 
             if export:
+                if scales is not None and self._loss_fn == 'MGAU':
+                    lower, upper = gaussian_intervals(preds, scales, self.metric.interval_alpha)
+                    path = self._get_unique_save_path('gaussian').replace('.npy', '.npz')
+                    # Match uniqueness against the actual extension as well.
+                    while os.path.exists(path):
+                        path = path[:-4] + '_next.npz'
+                    np.savez_compressed(path, mean=preds.numpy(), covariance=scales.numpy(),
+                                        target=labels.numpy(), lower=lower.numpy(), upper=upper.numpy(),
+                                        interval_alpha=self.metric.interval_alpha)
                 self.save_result(preds, labels)
                 self.save_test()
 

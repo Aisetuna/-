@@ -12,6 +12,8 @@ from utils.graph_algo import normalize_adj_mx
 
 
 def add_args(parser):
+    parser.add_argument('--interval_alpha', type=float, default=0.05,
+                        help='Gaussian marginal interval miscoverage; default 95 percent coverage')
     parser.add_argument("--hidden_dim_s", type=int, default=64)
     parser.add_argument("--hidden_dim_t", type=int, default=64)
     parser.add_argument("--emb_dim", type=int, default=32)
@@ -60,7 +62,7 @@ if __name__ == "__main__":
         build_model=build_model,
         setup=setup,
         loss_fn="MGAU",
-        metric_list=["MGAU", "MAE", "MAPE", "RMSE", "CRPS", "KL"],
+        metric_list=["MGAU", "MAE", "MAPE", "RMSE", "CRPS", "KL", "MPIW", "COV", "PAPER_HALF_WIDTH"],
         device_override="cuda:0",
         make_scheduler=lambda o, a: torch.optim.lr_scheduler.StepLR(o, step_size=a.step_size, gamma=a.gamma),
     )
