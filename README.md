@@ -463,3 +463,4 @@ python utils/res.py --log result/MyExperiment/UQGNN/chicago_15min/<timestamp>.lo
 ## 许可证
 
 本项目依据 [MIT 许可证](LICENSE) 发布。
+本仓库用于管理 UQGNN 复现实验代码。由于 GitHub 不适合直接存放数 GB 原始数据，数据和训练结果按 `GIT_VERSIONING.md` 的规则保留在本地。
